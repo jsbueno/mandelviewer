@@ -46,6 +46,7 @@ class Controls:
 
     button_data = {
         "undo": ("Z", "undo"),
+        "square": ("R", "square"),
     }
 
     def __init__(self, parent):
@@ -246,9 +247,7 @@ class Mandelbrot:
         self.prev_click = None
         self.controls.clear()
         print(f"new corners: {self.c1} - {self.c2}")
-        pygame.event.post(pygame.Event(RE_RENDER))
-        if self.rendering:
-            raise RenderCancel()
+        self.re_render()
 
     def handle_move(self, event):
         pos = V2(event.pos)
@@ -262,10 +261,20 @@ class Mandelbrot:
         self.controls.rect((*self.prev_click, w, h))
         self.update()
 
+    def square(self):
+        c2 = V2(self.c2.x, self.c1.y + (self.c2.x - self.c1.x) / 4 * 3)
+        self.c2 = c2
+        self.re_render()
+
+    def re_render(self):
+        pygame.event.post(pygame.Event(RE_RENDER))
+        if self.rendering:
+            raise RenderCancel()
+
     def undo(self):
         if self.window_stack:
             self.c1, self.c2 = self.window_stack.pop()
-            pygame.event.post(pygame.Event(RE_RENDER))
+            self.re_render()
         print("undo")
 
 def init():
