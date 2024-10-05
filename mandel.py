@@ -1,4 +1,6 @@
 import math
+import os
+import sys
 
 import pygame
 from pygame import Vector2 as V2
@@ -47,6 +49,7 @@ class Controls:
     button_data = {
         "undo": ("Z", "undo"),
         "square": ("R", "square"),
+        "save": ("V", "save")
     }
 
     def __init__(self, parent):
@@ -113,6 +116,7 @@ class Mandelbrot:
         self.display_controls = True
 
         self.window_stack = []
+        self.img_counter = 0
 
     def update(self):
         self.screen.blit(self.canvas, (0, 0))
@@ -217,8 +221,12 @@ class Mandelbrot:
             if event.type==pygame.KEYDOWN:
                 if event.unicode in ("\x1b", "q"):  #  <ESC>
                     raise RenderCancel()
-                if event.unicode == "\x09":
+                elif event.unicode == "\x09":  # <tab>
                     self.display_controls = not self.display_controls
+                    self.update()
+                elif event.unicode == "\x0d":  # <ENTER>
+                    if self.prev_click:
+                        self.zoom_in(self.cursor_last_seen)
             elif event.type==pygame.WINDOWCLOSE:
                 raise ExitApp
             elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -241,6 +249,9 @@ class Mandelbrot:
         # second click - change rendering window:
 
         # TBD: maybe use a lock - these two have to change at once, and any rendering must be cancelled
+        self.zoom_in(pos)
+
+    def zoom_in(self, pos):
         self.window_stack.append((self.c1, self.c2))
         self.c1 = self.screen_to_graph(self.prev_click, False)
         self.c2 = self.screen_to_graph(pos, False)
@@ -251,6 +262,7 @@ class Mandelbrot:
 
     def handle_move(self, event):
         pos = V2(event.pos)
+        self.cursor_last_seen = pos
         if not self.prev_click:
             return
         print(pos)
@@ -276,6 +288,17 @@ class Mandelbrot:
             self.c1, self.c2 = self.window_stack.pop()
             self.re_render()
         print("undo")
+
+    def save(self):
+
+        name = f"mandel_frame__{self.c1.x}_{self.c1.y}__{self.c2.x}_{self.c2.y}.jpg"
+        pygame.image.save(self.canvas, name)
+        if sys.platform == "linux":
+            pid = os.fork()
+            if pid: return
+            os.system(f"gimp {name}")
+            # instantly quits the forked process:
+            os._exit()
 
 def init():
     global sc, max_iter, pal2, RE_RENDER, font
