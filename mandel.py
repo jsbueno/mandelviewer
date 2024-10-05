@@ -11,9 +11,25 @@ class ExitApp(Exception):
 
 W, H = SIZE = V2(800, 600)
 
+
+class Controls:
+    def __init__(self, screen):
+        self.screen = screen
+        self.canvas = pygame.Surface(screen.get_size()).convert_alpha()
+        self.clear()
+
+    def clear(self):
+        self.canvas.fill((255,255,255, 0))
+
+    def rect(self,  rect):
+        pygame.draw.rect(self.canvas, (255, 0, 0), tuple(map(int, rect)), 3)
+
 class Mandelbrot:
     def __init__(self, screen, palette, max_iter, c1=V2(-2,1), c2=V2(1,-1)):
-        self.sc = screen
+        self.screen = screen
+        self.canvas = pygame.Surface(screen.get_size()).convert_alpha()
+        self.controls = Controls(screen)
+
         self.palette = palette
         self.c1 = c1
         self.c2 = c2
@@ -22,6 +38,13 @@ class Mandelbrot:
 
         self.prev_click = None
         self.rendering = False
+        self.display_controls = True
+
+    def update(self):
+        self.screen.blit(self.canvas, (0, 0))
+        if self.display_controls:
+            self.screen.blit(self.controls.canvas, (0, 0))
+        pygame.display.flip()
 
 
     def screen_to_graph(self, pos, return_complex=True) -> complex | V2:
@@ -44,7 +67,7 @@ class Mandelbrot:
         return V2(cx, cy)
 
     def iter_corners(self, update=True):
-        sc = self.sc
+        sc = self.canvas
         size = self.size
         palette = self.palette
         mandel = self.mandel
@@ -66,10 +89,9 @@ class Mandelbrot:
                     sc.set_at((x,y), palette[value % len(palette)])
                 if y % 50 == 0:
                     if update:
-                        pygame.display.flip()
+                        self.update()
                     self.handle()
-            if update:
-                pygame.display.flip()
+            self.update()
         except RenderCancel:
             return
         finally:
@@ -121,11 +143,15 @@ class Mandelbrot:
             if event.type==pygame.KEYDOWN:
                 if event.unicode in ("\x1b", "q"):  #  <ESC>
                     raise RenderCancel()
+                if event.unicode == "\x09":
+                    self.display_controls = not self.display_controls
             elif event.type==pygame.WINDOWCLOSE:
                 raise ExitApp
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 self.handle_click(event)
                 print(event.pos)
+            elif event.type == pygame.MOUSEMOTION:
+                self.handle_move(event)
             elif event.type == RE_RENDER:
                 if self.rendering:
                     pygame.event.post(event)
@@ -135,7 +161,7 @@ class Mandelbrot:
     def handle_click(self, event):
         pos = event.pos
         if not self.prev_click:
-            self.prev_click = pos
+            self.prev_click = V2(pos)
             return
         # second click - change rendering window:
 
@@ -143,11 +169,23 @@ class Mandelbrot:
         self.c1 = self.screen_to_graph(self.prev_click, False)
         self.c2 = self.screen_to_graph(pos, False)
         self.prev_click = None
+        self.controls.clear()
         print(f"new corners: {self.c1} - {self.c2}")
         pygame.event.post(pygame.Event(RE_RENDER))
         if self.rendering:
             raise RenderCancel()
 
+    def handle_move(self, event):
+        pos = V2(event.pos)
+        if not self.prev_click:
+            return
+        print(pos)
+        self.controls.clear()
+        #c1 = self.graph_to_screen(self.c1)
+        #c2 = self.graph_to_screen(self.c2)
+        w, h = int(pos.x - self.prev_click.x), int(pos.y - self.prev_click.y)
+        self.controls.rect((*self.prev_click, w, h))
+        self.update()
 
 def init():
     global sc, max_iter, pal2, RE_RENDER
