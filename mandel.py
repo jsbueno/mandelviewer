@@ -11,24 +11,95 @@ class ExitApp(Exception):
 
 W, H = SIZE = V2(800, 600)
 
+button_bg = (192, 192, 192)
+
+def center_blit(bg, fg):
+    pw, ph = bg.get_size()
+    w, h = fg.get_size()
+    corner_x = (pw - w) // 2
+    corner_y = (ph - h) // 2
+    bg.blit(fg, (corner_x, corner_y))
+    return bg
+
+def stamp_str(bg: pygame.Surface, text: str):
+    text_img = font.render(text, True, (0,0,0))
+    return center_blit(bg, text_img)
+
+class Button(pygame.sprite.Sprite):
+    def __init__(self, rect, character, action):
+        super().__init__()
+        self.rect = rect
+        self.image = pygame.Surface(rect.size)
+        self.image.fill(button_bg)
+        self.image = stamp_str(self.image, character)
+        self.action = action
+
+    def render(self, canvas):
+        canvas.blit(self.image, self.rect)
+
+    def hit(self, pos):
+        return self.rect.collidepoint(pos)
+
+
 
 class Controls:
-    def __init__(self, screen):
-        self.screen = screen
-        self.canvas = pygame.Surface(screen.get_size()).convert_alpha()
+
+    button_data = {
+        "undo": ("Z", "undo"),
+    }
+
+    def __init__(self, parent):
+        self.parent = parent
+        self.size = V2(parent.screen.get_size())
+        self.canvas = pygame.Surface(self.size).convert_alpha()
+        self.buttons = pygame.sprite.Group()
+        self.reset()
+
+    def reset(self):
+        self.buttons.empty()
+        self.create_buttons()
         self.clear()
 
     def clear(self):
         self.canvas.fill((255,255,255, 0))
+        self.render_buttons()
+
+    def render_buttons(self):
+        for button in self.buttons:
+            self.canvas.blit(button.image, button.rect)
+
+    def create_buttons(self):
+        self.grid = dict()
+        grid_spacing = self.size.x // 15
+        button_size = 20  # Height in pixels
+        current_x = self.size.x - grid_spacing
+        current_y = self.size.y - grid_spacing
+        for button_name, data in self.button_data.items():
+            button = Button(
+                pygame.Rect((current_x, current_y, button_size, button_size)),
+                character = data[0],
+                action = getattr(self.parent, data[1]),
+            )
+            self.buttons.add(button)
+            current_y -= grid_spacing
 
     def rect(self,  rect):
         pygame.draw.rect(self.canvas, (255, 0, 0), tuple(map(int, rect)), 3)
+
+    def handle(self, event):
+        pos = event.pos
+        for button in self.buttons:
+            if button.hit(pos):
+                button.action()
+                return True
+
+        return False
 
 class Mandelbrot:
     def __init__(self, screen, palette, max_iter, c1=V2(-2,1), c2=V2(1,-1)):
         self.screen = screen
         self.canvas = pygame.Surface(screen.get_size()).convert_alpha()
-        self.controls = Controls(screen)
+        self.controls = Controls(self)
 
         self.palette = palette
         self.c1 = c1
@@ -39,6 +110,8 @@ class Mandelbrot:
         self.prev_click = None
         self.rendering = False
         self.display_controls = True
+
+        self.window_stack = []
 
     def update(self):
         self.screen.blit(self.canvas, (0, 0))
@@ -148,7 +221,8 @@ class Mandelbrot:
             elif event.type==pygame.WINDOWCLOSE:
                 raise ExitApp
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                self.handle_click(event)
+                if not self.controls.handle(event):
+                    self.handle_click(event)
                 print(event.pos)
             elif event.type == pygame.MOUSEMOTION:
                 self.handle_move(event)
@@ -166,6 +240,7 @@ class Mandelbrot:
         # second click - change rendering window:
 
         # TBD: maybe use a lock - these two have to change at once, and any rendering must be cancelled
+        self.window_stack.append((self.c1, self.c2))
         self.c1 = self.screen_to_graph(self.prev_click, False)
         self.c2 = self.screen_to_graph(pos, False)
         self.prev_click = None
@@ -187,13 +262,20 @@ class Mandelbrot:
         self.controls.rect((*self.prev_click, w, h))
         self.update()
 
+    def undo(self):
+        if self.window_stack:
+            self.c1, self.c2 = self.window_stack.pop()
+            pygame.event.post(pygame.Event(RE_RENDER))
+        print("undo")
+
 def init():
-    global sc, max_iter, pal2, RE_RENDER
+    global sc, max_iter, pal2, RE_RENDER, font
     pygame.init()
     max_iter = 100
     sc = pygame.display.set_mode(SIZE)
     pal2  = {i: (i,  int(255 * math.sin(i/255 * math.pi)) , 255 - i) for i in range(255)}
     RE_RENDER  = pygame.event.custom_type()
+    font = pygame.Font(pygame.font.get_default_font(), 12)
 
 
 def main():
