@@ -49,7 +49,8 @@ class Controls:
     button_data = {
         "undo": ("Z", "undo"),
         "square": ("R", "square"),
-        "save": ("V", "save")
+        "save": ("V", "save"),
+        "iter": ("I", "change_iter")
     }
 
     def __init__(self, parent):
@@ -160,16 +161,28 @@ class Mandelbrot:
         ch = y1 - y0
         self.rendering = True
         try:
+            pixels = {}
+            max_value = 0
+            min_value = 1_000_000
             for y in range(h):
                 for x in range(w):
                     target = self.screen_to_graph((x, y))
                     value = mandel(target)
+                    pixels[x, y] = value
                     sc.set_at((x,y), palette[value % len(palette)])
+                    max_value = max(max_value, value)
+                    min_value = min(min_value, value)
                 if y % 50 == 0:
                     if update:
                         self.update()
                     self.handle()
             self.update()
+            ampl = max(1, max_value - min_value)
+            for pixel, value in pixels.items():
+                value = int(len(palette) * (value - min_value)/ ampl)
+                sc.set_at(pixel, palette[value % len(palette)])
+            self.update()
+            print("blip")
         except RenderCancel:
             return
         finally:
@@ -219,7 +232,11 @@ class Mandelbrot:
     def handle(self):
         for event in pygame.event.get():
             if event.type==pygame.KEYDOWN:
-                if event.unicode in ("\x1b", "q"):  #  <ESC>
+                if event.unicode in ("\x1b",) and self.prev_click:  #  <ESC>
+                    self.prev_click = None
+                    self.controls.clear()
+                    self.update()
+                elif event.unicode in ("\x1b", "q"):  #  <ESC>
                     raise RenderCancel()
                 elif event.unicode == "\x09":  # <tab>
                     self.display_controls = not self.display_controls
@@ -289,6 +306,13 @@ class Mandelbrot:
             self.re_render()
         print("undo")
 
+    def change_iter(self):
+        print(f"Current max iterations: {self.max_iter}")
+        try:
+            self.max_iter = int(input("New value: "))
+        except Exception:
+            print("Eeeek")
+
     def save(self):
 
         name = f"mandel_frame__{self.c1.x}_{self.c1.y}__{self.c2.x}_{self.c2.y}.jpg"
@@ -305,7 +329,7 @@ def init():
     pygame.init()
     max_iter = 100
     sc = pygame.display.set_mode(SIZE)
-    pal2  = {i: (i,  int(255 * math.sin(i/255 * math.pi)) , 255 - i) for i in range(255)}
+    pal2  = {i: (i,  int(255 * math.sin(i/255 * math.pi)) , 255 - i) for i in range(256)}
     RE_RENDER  = pygame.event.custom_type()
     font = pygame.Font(pygame.font.get_default_font(), 12)
 
